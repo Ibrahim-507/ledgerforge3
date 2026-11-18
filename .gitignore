@@ -8,3 +8,6 @@ data/
 
 .secret_key
 *.sqlite
+
+.env
+.secret_key

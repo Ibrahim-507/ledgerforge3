@@ -34,3 +34,6 @@ prefix_all(app)
 from app.routers import departments as _dep, employees as _emp, salary as _sal
 for _r in (_dep.router, _emp.router, _sal.router):
     app.include_router(_r, prefix='/api/v1')
+
+from app.observability import install
+install(app)

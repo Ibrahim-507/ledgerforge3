@@ -7,6 +7,7 @@ server and opens the login page in your browser. Every step prints [ OK ] or [FA
 Press Ctrl+C in this window to stop the server."""
 import ast
 import importlib
+import importlib.util
 import os
 import re
 import secrets
