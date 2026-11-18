@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent
 REQUIRED = [
     "app/main.py", "app/deps.py", "app/security.py", "app/auth_store.py", "app/permissions.py", "app/books_db.py",
     "app/tax_config.py", "app/routers/auth.py", "app/routers/web.py", "app/routers/books_api.py",
-    "app/routers/reports_api.py", "app/routers/tax_api.py", "scripts/init_db.py",
+    "app/routers/reports_api.py", "app/routers/tax_api.py", "app/routers/jobs_api.py", "app/versioning.py", "app/jobs.py", "app/worker.py", "scripts/init_db.py",
 ]
 PACKAGES = {"fastapi": "fastapi", "uvicorn": "uvicorn", "jwt": "PyJWT", "pandas": "pandas", "reportlab": "reportlab"}
 
@@ -41,33 +41,45 @@ def stop(msg):
 
 
 # ---------------------------------------------------------------- pure helpers (tested) ----
+ROUTERS = [("auth", "_auth_router"), ("books_api", "_books_api"), ("reports_api", "_reports_api"), ("tax_api", "_tax_api"),
+           ("jobs_api", "_jobs_api"), ("web", "_web_router")]
+
+
 def patch_main_text(src: str):
-    """Return (new_source, message). new_source is None when nothing could or needed to change."""
-    need_base = not ("_authorize" in src and "_auth_router.router" in src)
-    need_web = "_web_router" not in src
-    if not need_base and not need_web:
+    """Make app/main.py: require login on every route, put routes under /api/v1, include all new routers.
+    Safe to run again. Returns (new_source, message); new_source is None when nothing could or needed to change."""
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:
+        return None, f"app/main.py has a syntax error already: {e}"
+    need_dep = "_authorize" not in src
+    need_version = "_prefix_all" not in src
+    missing = [(m, a) for m, a in ROUTERS if f"{a}.router" not in src]
+    if not (need_dep or need_version or missing):
         return None, "already secured"
-    m = re.search(r"^(?P<indent>[ \t]*)app\s*=\s*FastAPI\(", src, re.M)
-    if not m:
+    node = next((n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(x, ast.Name) and x.id == "app" for x in n.targets)
+                 and isinstance(n.value, ast.Call) and getattr(n.value.func, "id", getattr(n.value.func, "attr", "")) == "FastAPI"), None)
+    if node is None:
         return None, "could not find a line like  app = FastAPI(...)  in app/main.py"
-    if need_base and re.search(r"FastAPI\([^)]*dependencies\s*=", src, re.S):
+    if need_dep and re.search(r"FastAPI\([^)]*dependencies\s*=", src, re.S):
         return None, "your FastAPI(...) already has dependencies=; edit app/main.py by hand"
-    imports, includes = "", []
-    if need_base:
-        imports += ("from fastapi import Depends as _Depends\n"
-                    "from app.deps import authorize as _authorize\n"
-                    "from app.routers import auth as _auth_router, books_api as _books_api, reports_api as _reports_api, tax_api as _tax_api\n")
-        includes += ["app.include_router(_auth_router.router)", "app.include_router(_books_api.router)",
-                     "app.include_router(_reports_api.router)", "app.include_router(_tax_api.router)"]
-    if need_web:
-        imports += "from app.routers import web as _web_router\n"
-        includes += ["app.include_router(_web_router.router)"]
-    new = src[:m.start()] + imports + "\n" + src[m.start():]
-    if need_base:
+    lines = src.splitlines(keepends=True)
+    if need_version:                                         # right AFTER app = FastAPI(...) and BEFORE any include_router
+        lines.insert(node.end_lineno, "from app.versioning import prefix_all as _prefix_all\n_prefix_all(app)\n")
+    new = "".join(lines)
+    imports = ""
+    if need_dep:
+        imports += "from fastapi import Depends as _Depends\nfrom app.deps import authorize as _authorize\n"
+    imports += "".join(f"from app.routers import {m} as {a}\n" for m, a in missing)
+    m0 = re.search(r"^[ \t]*app\s*=\s*FastAPI\(", new, re.M)
+    new = new[:m0.start()] + imports + ("\n" if imports else "") + new[m0.start():]
+    if need_dep:
         new = re.sub(r"^([ \t]*app\s*=\s*FastAPI\()", r"\1dependencies=[_Depends(_authorize)], ", new, count=1, flags=re.M)
-    block = "# --- login, permissions, login page and new routers (added by start_server.py) ---\n" + "\n".join(includes) + "\n"
-    guard = re.search(r"^if\s+__name__\s*==", new, re.M)
-    new = (new[:guard.start()] + block + "\n" + new[guard.start():]) if guard else (new.rstrip("\n") + "\n\n" + block)
+    if missing:
+        block = "# --- login, permissions, /api/v1 and the new routers (added by start_server.py) ---\n" + \
+                "".join(f"app.include_router({a}.router)\n" for _, a in missing)
+        guard = re.search(r"^if\s+__name__\s*==", new, re.M)
+        new = (new[:guard.start()] + block + "\n" + new[guard.start():]) if guard else (new.rstrip("\n") + "\n\n" + block)
     try:
         ast.parse(new)
     except SyntaxError as e:
@@ -101,6 +113,19 @@ def ensure_secret(root: Path) -> str:
     return key
 
 
+def wait_then_open(url, port, seconds=60):
+    """Open the browser only when the server really answers (a browser opened too early shows 'refused to connect')."""
+    end = time.time() + seconds
+    while time.time() < end:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("127.0.0.1", port)) == 0:
+                print(f"\n[ OK ] The server is answering. Opening {url} in your browser.", flush=True)
+                webbrowser.open(url)
+                return
+        time.sleep(0.5)
+    print(f"\n[FAIL] Nothing answered on port {port} after {seconds} seconds. Read the lines above for the reason.", flush=True)
+
+
 # ---------------------------------------------------------------- the steps ----
 def main():
     os.chdir(ROOT)
@@ -129,7 +154,7 @@ def main():
 
     # 4. main.py secured and has the login page
     mp = ROOT / "app" / "main.py"
-    new, msg = patch_main_text(mp.read_text(encoding="utf-8"))
+    new, msg = patch_main_text(mp.read_text(encoding="utf-8-sig"))      # utf-8-sig: also reads files that start with a hidden BOM
     if new is not None:
         shutil.copy(mp, ROOT / "app" / "main.py.bak")
         mp.write_text(new, encoding="utf-8")
@@ -149,10 +174,10 @@ def main():
         stop("Copy the lines above into the chat and I will tell you the fix.")
     paths = {getattr(r, "path", None) for r in m.app.routes}
     deps = [getattr(d.dependency, "__name__", "") for d in m.app.router.dependencies]
-    say("/auth/login" in paths, "login route /auth/login exists")
+    say("/api/v1/auth/login" in paths, "login route /api/v1/auth/login exists")
     say("/" in paths, "login page route / exists")
     say("authorize" in deps, "every route requires a login (the security check is switched on)")
-    if not ({"/auth/login", "/"} <= paths and "authorize" in deps):
+    if not ({"/api/v1/auth/login", "/"} <= paths and "authorize" in deps):
         stop("app/main.py is not wired correctly. Copy it into the chat and I will edit it for you.")
 
     # 6. database and demo users
@@ -194,16 +219,21 @@ def main():
     pw = os.environ.get("DEMO_PASSWORD", "Demo@12345")
     print("\n" + "=" * 60)
     print(f"  LOGIN PAGE :  {url}")
-    print(f"  API DOCS   :  {url}docs")
+    print(f"  API DOCS   :  {url}docs   (all API routes are under /api/v1)")
     print(f"  PASSWORD   :  {pw}   (the same for every demo user)")
     for role, name in sample.items():
         print(f"  {role:<9}  :  {name}")
     print("=" * 60)
     print("  Leave this window open. Press Ctrl+C here to stop the server.\n")
 
-    threading.Thread(target=lambda: (time.sleep(2.5), webbrowser.open(url)), daemon=True).start()
+    threading.Thread(target=wait_then_open, args=(url, port), daemon=True).start()
     import uvicorn
-    uvicorn.run("app.main:app", host="127.0.0.1", port=port, log_level="info")
+    try:
+        uvicorn.run("app.main:app", host="127.0.0.1", port=port, log_level="info")
+    except SystemExit:
+        pass
+    print("\n[STOPPED] The server is not running any more.")
+    print("If you did not press Ctrl+C, copy the lines printed ABOVE this one into the chat.")
 
 
 if __name__ == "__main__":

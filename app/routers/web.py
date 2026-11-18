@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
 router = APIRouter(include_in_schema=False)
+router._unversioned = True              # the login page stays at /, everything else is under /api/v1
 
 PAGE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -51,22 +52,22 @@ PAGE = r"""<!doctype html>
 </main>
 <script>
 (function(){
- var $=function(id){return document.getElementById(id)}; var token=sessionStorage.getItem("lf_token");
+ var $=function(id){return document.getElementById(id)}; var API="/api/v1"; var token=sessionStorage.getItem("lf_token");
  function show(code,what,body){var b=$("status");b.textContent=code;b.className="badge "+(code==200?"b200":(code>=400?"b4":""));
   $("what").textContent=what;$("out").textContent=typeof body==="string"?body:JSON.stringify(body,null,2);$("outCard").classList.remove("hide");}
  function setUser(u){$("whoName").textContent=u.username||u.user_id;$("whoRole").textContent=u.role;$("whoEmp").textContent=u.employee_id||"-";
   if(!$("emp").value&&u.employee_id){$("emp").value=u.employee_id;}
   $("loginCard").classList.add("hide");$("appCard").classList.remove("hide");}
- function api(path,opts){opts=opts||{};opts.headers=Object.assign({},opts.headers||{});if(token){opts.headers["Authorization"]="Bearer "+token;}return fetch(path,opts);}
+ function api(path,opts){opts=opts||{};opts.headers=Object.assign({},opts.headers||{});if(token){opts.headers["Authorization"]="Bearer "+token;}return fetch(API+path,opts);}
  function logout(msg){token=null;sessionStorage.removeItem("lf_token");$("appCard").classList.add("hide");$("outCard").classList.add("hide");$("loginCard").classList.remove("hide");$("loginMsg").textContent=msg||"";}
  async function callJson(path){var r=await api(path);var t=await r.text();var d;try{d=JSON.parse(t)}catch(e){d=t}
   if(r.status===401&&token&&path!=="/auth/me"){/* token expired or user deactivated */}
-  show(r.status,"GET "+path,d);return r;}
+  show(r.status,"GET "+API+path,d);return r;}
  async function loadMe(){var r=await api("/auth/me");if(r.status===200){setUser(await r.json());return true}logout(r.status===401?"Please log in again.":"");return false}
  $("loginBtn").onclick=async function(){$("loginMsg").textContent="Signing in...";
-  try{var r=await fetch("/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("u").value.trim(),password:$("p").value})});
+  try{var r=await fetch(API+"/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:$("u").value.trim(),password:$("p").value})});
    var d=await r.json();
-   if(r.status===200){token=d.access_token;sessionStorage.setItem("lf_token",token);$("p").value="";$("loginMsg").textContent="";await loadMe();show(200,"POST /auth/login",{role:d.role,expires_in_seconds:d.expires_in,token_type:d.token_type});}
+   if(r.status===200){token=d.access_token;sessionStorage.setItem("lf_token",token);$("p").value="";$("loginMsg").textContent="";await loadMe();show(200,"POST "+API+"/auth/login",{role:d.role,expires_in_seconds:d.expires_in,token_type:d.token_type});}
    else{$("loginMsg").textContent=(d.detail||"Login failed")+" (HTTP "+r.status+")";}}
   catch(e){$("loginMsg").textContent="Could not reach the server: "+e;}};
  $("p").addEventListener("keydown",function(e){if(e.key==="Enter"){$("loginBtn").click();}});
@@ -74,8 +75,8 @@ PAGE = r"""<!doctype html>
  document.querySelectorAll("[data-get]").forEach(function(b){b.onclick=function(){callJson(b.getAttribute("data-get"))}});
  $("slipBtn").onclick=function(){callJson("/payslips/"+encodeURIComponent($("emp").value.trim())+"/"+encodeURIComponent($("run").value.trim()))};
  $("pdfBtn").onclick=async function(){var p="/payslips/"+encodeURIComponent($("emp").value.trim())+"/"+encodeURIComponent($("run").value.trim())+"/pdf";
-  var r=await api(p);if(r.status===200){var blob=await r.blob();window.open(URL.createObjectURL(blob),"_blank");show(200,"GET "+p,"PDF opened in a new tab")}
-  else{var t=await r.text();var d;try{d=JSON.parse(t)}catch(e){d=t}show(r.status,"GET "+p,d)}};
+  var r=await api(p);if(r.status===200){var blob=await r.blob();window.open(URL.createObjectURL(blob),"_blank");show(200,"GET "+API+p,"PDF opened in a new tab")}
+  else{var t=await r.text();var d;try{d=JSON.parse(t)}catch(e){d=t}show(r.status,"GET "+API+p,d)}};
  if(token){loadMe();}
 })();
 </script></body></html>"""

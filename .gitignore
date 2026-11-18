@@ -5,3 +5,6 @@ __pycache__/
 *.db
 .pytest_cache/
 data/
+
+.secret_key
+*.sqlite
