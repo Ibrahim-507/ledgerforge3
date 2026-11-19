@@ -10,7 +10,6 @@ from app.auth_store import add_user, set_active
 from app.books_db import connect
 from app.deps import authorize
 from app.permissions import PUBLIC, RULES
-from app.versioning import normalize
 from app.routers import auth as auth_router
 from app.security import create_token
 
@@ -127,7 +126,6 @@ def test_every_route_of_the_real_app_has_a_permission_rule():
     for route in app.routes:
         if isinstance(route, APIRoute):
             for method in route.methods - {"HEAD", "OPTIONS"}:
-                path = normalize(route.path)
-                if (method, path) not in RULES and (method, path) not in PUBLIC:
+                if (method, route.path) not in RULES and (method, route.path) not in PUBLIC:
                     missing.append(f"{method} {route.path}")
     assert not missing, "Routes with no permission rule: " + ", ".join(sorted(missing))
