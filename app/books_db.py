@@ -130,12 +130,6 @@ CREATE TABLE IF NOT EXISTS statutory_rates(
 CREATE TABLE IF NOT EXISTS rule_changes(
   change_id INTEGER PRIMARY KEY AUTOINCREMENT, changed_at TEXT NOT NULL, changed_by TEXT NOT NULL,
   rule_type TEXT NOT NULL, rule_key TEXT NOT NULL, field TEXT NOT NULL, old_value TEXT, new_value TEXT, reason TEXT NOT NULL);
-
--- Task 16: background jobs (the bulk payroll run) with progress that any API worker can read
-CREATE TABLE IF NOT EXISTS jobs(
-  job_id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED',   -- QUEUED -> RUNNING -> DONE | FAILED
-  total INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, message TEXT, params TEXT,
-  created_by TEXT, backend TEXT, created_at TEXT, started_at TEXT, finished_at TEXT, result TEXT, error TEXT);
 """
 
 
@@ -145,9 +139,6 @@ def connect(path=":memory:", check_same_thread=True) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.create_aggregate("dsum", 1, _DSum)
-    if path != ":memory:":
-        conn.execute("PRAGMA busy_timeout = 30000")      # wait instead of failing when the API and the worker write together
-        conn.execute("PRAGMA journal_mode = WAL")        # readers do not block the writer
     conn.executescript(SCHEMA)
     return conn
 
