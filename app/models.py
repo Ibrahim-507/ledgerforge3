@@ -1,4 +1,4 @@
-﻿from datetime import date, time
+from datetime import date, time
 from decimal import Decimal
 from sqlalchemy import Date, ForeignKey, Numeric, String, Text, Time
 from sqlalchemy.orm import Mapped, mapped_column
@@ -48,8 +48,8 @@ class Employee(Base):
     employee_id = Column(String(20), primary_key=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
-    full_name = Column(String(200), nullable=False)
-    work_email = Column(String(200), nullable=False, unique=True)
+    full_name = Column(String(200), nullable=False, index=True)
+    work_email = Column(String(200), nullable=False, unique=True, index=True)
     gender = Column(String(20))
     date_of_birth = Column(Date)  # sensitive: never show in list endpoints
     hire_date = Column(Date, nullable=False)
@@ -72,6 +72,8 @@ class Employee(Base):
     exit_type = Column(String(50))
     exit_reason = Column(String(200))
     created_at = Column(Date)
+
+    __table_args__ = (Index("ix_employee_name_email", "full_name", "work_email"),)
 
 
 class EmployeeAssignment(Base):

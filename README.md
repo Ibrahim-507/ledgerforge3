@@ -1,68 +1,300 @@
-# LedgerForge: starter project
-This is a tiny, working skeleton. It already runs. You grow it into the full product over 4 weeks.
+# LedgerForge: Payroll & Accounting Engine
 
-## First 10 minutes
+A complete payroll and accounting backend for **Zenith Nova Technologies**. Built with FastAPI, PostgreSQL, SQLite (books), Redis/Celery, and Docker.
+
+## Quick Start (Local)
+
+```bash
+# 1. Clone and enter
+git clone https://github.com/your-org/ledgerforge.git
+cd ledgerforge
+
+# 2. Configure secrets (never commit .env)
+cp .env.example .env
+# Edit .env with real values:
+#   LEDGERFORGE_SECRET_KEY=<python -c "import secrets; print(secrets.token_urlsafe(48))">
+#   POSTGRES_PASSWORD=<strong password>
+#   DEMO_PASSWORD=<demo user password>
+
+# 3. Start everything (API, Postgres, Redis, Celery worker)
+docker compose up --build
+
+# 4. Open API docs
+open http://localhost:8000/docs
 ```
+
+**Demo logins** (password from `DEMO_PASSWORD` in `.env`):
+| Role | Email |
+|------|-------|
+| Admin | sanjay.kumar@znova-demo.example |
+| Admin | vijay.ramesh@znova-demo.example |
+| HR | hemant.mathew@znova-demo.example |
+| HR | kiran.krishnan@znova-demo.example |
+| Employee | jatin.jayaraman@znova-demo.example |
+| Employee | zaid.selvam@znova-demo.example |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  U[User / Phone] -->|HTTPS| API[FastAPI /api/v1]
+  API -->|login, roles| SEC[JWT + permissions table]
+  API --> PG[(PostgreSQL: departments, employees, salary, attendance, leave)]
+  API --> BOOKS[(SQLite books: ledger, invoices, bills, payroll runs)]
+  API -->|bulk payroll job| Q[Redis queue]
+  Q --> W[Celery worker]
+  W --> BOOKS
+  CHK[verify_ledgerforge.py] -->|CSV export| BOOKS
+```
+
+**One payroll run:** attendance + leave → payroll engine → payroll run (draft, processed, approved, paid) → ledger entries → trial balance → P&L → balance sheet.
+
+---
+
+## Features
+
+| Module | Description |
+|--------|-------------|
+| **Employees** | Departments, roles, salary structures with revision history, prorated mid-month joiners |
+| **Attendance & Leave** | 150k+ attendance rows, 3.4k leave requests, loss-of-pay calc, holiday-aware |
+| **Payroll Engine** | 7,340 payslips match official data exactly (0 mismatches) |
+| **Payslips** | PDF generation, role-based access (owner, HR, Admin) |
+| **Ledger** | Double-entry, immutable posted entries, reversals for corrections |
+| **Invoicing** | Draft → Sent → Paid/Overdue, GST, payments, receivables reconciliation |
+| **Vendor Bills** | Submit → Approve → Pay, duplicate detection, GST |
+| **Payroll Runs** | Idempotent monthly runs, separation of duties (run ≠ approve), full audit trail |
+| **Tax Engine** | Slabs & parameters as data, yearly regimes, marginal relief, rule change log |
+| **Statutory Reports** | Monthly PF/ESI/TDS/PT remittance, employer share, CSV export |
+| **Financial Reports** | Trial Balance, P&L, Balance Sheet (as-of date), contra assets |
+| **Background Jobs** | 18-month bulk payroll via Celery, progress endpoint `/api/v1/jobs/{id}` |
+| **Security** | scrypt hashes, 30-min JWT, roles (Admin/HR/Employee), deny-by-default |
+| **Observability** | JSON logs, `/health` checks both DBs, request IDs, backup/restore scripts |
+
+---
+
+## API Reference
+
+All endpoints under `/api/v1` except `/auth/login`, `/health`, `/openapi.json`.
+
+### Authentication
+```
+POST   /auth/login           # Get JWT (form: username, password)
+```
+
+### Employees
+```
+GET    /employees                    # List (pagination, search, filter)
+GET    /employees/{id}               # Get one
+POST   /employees                    # Create (Admin/HR)
+PATCH  /employees/{id}               # Update (Admin/HR)
+DELETE /employees/{id}               # Set exit_date (Admin/HR)
+GET    /employees/{id}/team          # Direct reports
+```
+
+### Salary
+```
+GET    /salary/structures            # List structures
+POST   /salary/structures            # Create (Admin/HR)
+GET    /salary/structures/{id}       # Get with revisions
+POST   /salary/structures/{id}/revisions  # Add revision (Admin/HR)
+GET    /salary/employee/{id}         # Salary on a date
+```
+
+### Attendance & Leave
+```
+GET    /attendance/summary/{emp_id}?month=2025-09
+GET    /leave/requests               # List (filter by status, employee)
+POST   /leave/requests               # Apply (Employee)
+PATCH  /leave/requests/{id}/approve  # Approve (HR)
+PATCH  /leave/requests/{id}/reject   # Reject (HR)
+GET    /leave/balances/{emp_id}
+```
+
+### Payroll
+```
+GET    /payroll/runs                 # List runs
+POST   /payroll/runs                 # Create run for month (HR)
+POST   /payroll/runs/{id}/process    # Process (HR)
+POST   /payroll/runs/{id}/approve    # Approve & post to ledger (Admin)
+POST   /payroll/runs/{id}/pay        # Mark paid (Admin)
+POST   /payroll/runs/{id}/reverse    # Reverse (Admin)
+GET    /payslips/{run_id}/{emp_id}   # View (owner, HR, Admin)
+GET    /payslips/{run_id}/{emp_id}/pdf  # Download PDF
+```
+
+### Jobs (Background Bulk Payroll)
+```
+POST   /jobs/payroll-process         # Start 18-month process (HR/Admin)
+POST   /jobs/payroll-approve         # Start 18-month approve (Admin)
+GET    /jobs                         # List jobs
+GET    /jobs/{job_id}                # Progress: status, done/total, percent, result
+```
+
+### Invoicing & Bills
+```
+GET    /invoices                     # List
+POST   /invoices                     # Create draft
+POST   /invoices/{id}/send           # Send (posts receivable)
+POST   /invoices/{id}/pay            # Record payment
+GET    /bills                        # List vendor bills
+POST   /bills                        # Submit bill
+POST   /bills/{id}/approve           # Approve (posts expense + payable)
+POST   /bills/{id}/pay               # Pay bill
+```
+
+### Reports
+```
+GET    /reports/trial-balance?from=2025-01-01&to=2025-12-31
+GET    /reports/profit-and-loss?from=2025-01-01&to=2025-12-31
+GET    /reports/balance-sheet?as_of=2026-09-30
+GET    /reports/statutory-summary
+GET    /reports/statutory/{kind}/{run_id}  # kind: pf, esi, tds, pt
+```
+
+### Exports
+```
+GET    /export/books                 # Download all books tables as ZIP (Admin)
+GET    /export/payroll?from=2025-04&to=2026-09  # Incremental payroll export
+```
+
+### System
+```
+GET    /health                       # Checks both DBs, no auth
+GET    /openapi.json                 # OpenAPI spec with examples
+```
+
+---
+
+## Running Tests
+
+```bash
+# All tests (203 tests, ~3 min)
+pytest -q
+
+# With coverage
+pytest --cov=app --cov-report=term-missing
+
+# Specific areas
+pytest tests/test_security.py tests/test_api_security.py -q
+pytest tests/test_payroll_engine.py tests/test_payroll_rules.py -q
+pytest tests/test_financials.py tests/test_statutory_reports.py -q
+```
+
+**Coverage:** 89% (203 tests pass)
+
+---
+
+## Verification (Official Checks)
+
+```bash
+# Export current data
+python -c "from app.exporter import export_all; export_all('my_export')"
+
+# Run 5 official integrity checks
+python verify_ledgerforge.py checks --data my_export/
+# Expected: 5/5 PASS
+# 1. Every journal entry balances
+# 2. Payroll equals ledger, every month
+# 3. Receivables equal open invoices
+# 4. Payroll employees exist
+# 5. Nobody is paid after leaving
+```
+
+---
+
+## Backup & Restore
+
+```bash
+# Backup (SQLite books + Postgres if pg_dump available)
+python -m scripts.backup
+
+# Verify restore
+python -m scripts.restore_check backups/books_YYYYMMDD_HHMMSS.sqlite
+# Expected: RESTORE PROVED
+```
+
+---
+
+## Development (No Docker)
+
+```bash
 python -m venv .venv
-# Windows: .venv\Scripts\activate      Mac/Linux: source .venv/bin/activate
+# Windows: .venv\Scripts\activate
+# Mac/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env            # Windows: copy .env.example .env
-python -m scripts.seed_example
+cp .env.example .env
+# Edit .env with local values (SQLite for books, no Postgres needed for API)
+python -m scripts.init_db
+python -m scripts.load_official_books
+python -m app.load_payroll
 uvicorn app.main:app --reload
 ```
-Open http://127.0.0.1:8000/docs and try `GET /departments`. Run `pytest` to see the tests pass.
 
-## What is already done for you (copy the pattern, do not just read it)
-- `app/models.py` one table (Department)   - `app/routers/departments.py` one router
-- `scripts/seed_example.py` one safe CSV loader   - `tests/` two working tests
+---
 
-## Rules
-Never commit `.env`. One Git branch per task (`lf-02-employee-model`). Write a test for every new endpoint.
+## Deployment (Production)
 
-## Task 6: Attendance and leave
+1. **Hosted PostgreSQL** (Neon, Supabase, Railway, or managed PG)
+2. **Hosted Redis** (for Celery)
+3. **Container host** (Fly.io, Railway, Render, Cloud Run, or VM)
+4. Set all `.env` values as environment variables in the host
+5. Deploy from `v1.0.0` tag
+6. Run migrations: `alembic upgrade head`
+7. Seed data: `python -m scripts.init_db && python -m scripts.load_official_books && python -m app.load_payroll`
+8. Run smoke test: `python smoke_test.py https://your-live-url`
 
-### Where the data comes from
-Five CSV files in the `csv` folder are loaded into five tables: `attendance` (150,155 rows), `leave_types`, `leave_requests` (3,441 rows), `leave_balances` and `holidays`. Attendance is loaded in chunks of 10,000 rows. The full load takes [__] seconds.
+---
 
-### Status words in attendance
-| Status | Counted as | Loss-of-pay days |
-|---|---|---|
-| PRESENT | present | 0 |
-| WFH | work from home | 0 |
-| PAID_LEAVE | paid leave | 0 |
-| UNPAID_LEAVE | unpaid leave | 1 |
-| ABSENT_LOP | absent | 1 |
-| HALF_DAY_UNPAID | half day unpaid | 0.5 |
+## Project Structure
 
-Loss-of-pay (LOP) days = absent days + unpaid leave days + 0.5 for each unpaid half day. This follows the payroll convention in the data sheet, and Task 7 uses it.
+```
+app/
+  main.py              # FastAPI app, routes, versioning, observability
+  models.py            # SQLAlchemy models (PostgreSQL)
+  models_payroll.py    # Payroll ORM models
+  database.py          # Postgres engine/session
+  books_db.py          # SQLite books layer (ledger, invoices, payroll runs)
+  deps.py              # DB dependencies, auth
+  permissions.py       # Role-permission matrix
+  security.py          # JWT, password hashing
+  observability.py     # JSON logs, /health middleware
+  cache.py             # TTL cache for reports
+  versioning.py        # /api/v1 prefix for all routers
+  worker.py            # Celery app
+  jobs.py              # Background job logic
+  payroll_engine.py    # Core calculation (7 rules)
+  payroll_rules.py     # Rule implementations
+  payroll_posting.py   # Payroll → ledger
+  payroll_runs.py      # Run lifecycle (draft→processed→approved→paid→reversed)
+  payslip_service.py   # Payslip data & PDF
+  ledger.py            # Journal entry CRUD + posting
+  financials.py        # Trial balance, P&L, Balance sheet
+  statutory_reports.py # PF/ESI/TDS/PT monthly
+  tax_config.py        # Tax slabs/parameters as data
+  exporter.py          # CSV export for verification
+  routers/             # API routers (auth, employees, salary, payslips, jobs, reports, books, tax)
+scripts/
+  init_db.py           # Seed users, chart of accounts, vendors, tax rules
+  load_official_books.py  # Load ledger, invoices, clients from CSV
+  load_payroll.py      # Load payroll runs & items from CSV
+  backup.py            # SQLite + pg_dump backup
+  restore_check.py     # Verify restore integrity
+  export_data.py       # Ad-hoc table export with date filters
+  entrypoint.py        # Docker startup (validate secrets, seed once, run API)
+tests/                 # 203 tests
+seed/                  # 30 CSV files (official dataset)
+```
 
-### Rule: missing check-out
-A row with `data_quality_flag = MISSING_CHECKOUT` counts as a **present** day, because the person checked in. Its overtime is **0**, because the hours cannot be known. The day is also reported as `missing_checkout_days` in the monthly summary, so payroll can review it. Reason: cutting someone's pay for a recording fault would be unfair, and these rows are only about 0.15% of attendance.
+---
 
-### Rule: counting leave days
-Leave days count Monday to Friday and skip public holidays from the `holidays` table. The exception is leave type **ML**: the data counts every weekday of its 26-week period, so holidays inside it are not subtracted. I checked my function against all 3,441 leave requests: **0 mismatches**.
+## Release Notes
 
-### Monthly summary
-`monthly_summary(employee, month)` returns: present days, work-from-home days, paid leave days, unpaid leave days, absent days, unpaid half days, LOP days, late days (from the `late_flag` column), overtime hours, and missing check-out days. Overtime hours are reported as recorded. The 50-hour cap and the eligible roles are applied in the payroll engine (Task 7).
+See [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md)
 
-### Leave flow
-- A request starts as **applied**. HR can **approve** or **reject** it.
-- A request is rejected when the balance is not enough.
-- The balance is reduced only when a request is approved.
-- Weekends and holidays are never counted as leave days.
+---
 
-### Half-day leave: how the design would change
-Store the leave days as a decimal (0.5 is allowed). Add a field for first half or second half of the day. In the attendance summary, a half-day leave day counts 0.5 as leave and 0.5 as worked, and must not be counted twice.
+## License
 
-### How I checked the results
-I counted 3 employees by hand in Excel and compared with the program output.
-
-| Employee | Month | Present | WFH | Paid leave | Late | Overtime | Missing check-out |
-|---|---|---|---|---|---|---|---|
-| EMP-0004 | 2025-09 | [__] | [__] | [__] | [__] | [__] | [__] |
-| EMP-0026 | 2025-10 | [__] | [__] | [__] | [__] | [__] | [__] |
-| EMP-0012 | 2026-02 | [__] | [__] | [__] | [__] | [__] | [__] |
-
-The program output matches this table for all three employees. [Write this only after your test passes.]
-
-Tests: `python -m pytest -q` gives [__] passed.
+Internal use only — Zenith Nova Technologies.

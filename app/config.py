@@ -3,5 +3,5 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./ledgerforge.db"
     data_dir: str = "../03_Data/csv"
     secret_key: str = "dev-only-change-me"
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(extra="ignore", env_file=".env")
 settings = Settings()

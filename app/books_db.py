@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS journal_entries(
   total_credit TEXT NOT NULL, reversal_of_source_id TEXT, created_by TEXT, created_at TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_je_source ON journal_entries(source_type, source_id)
   WHERE source_type IN ('PAYROLL_RUN','SALARY_PAYMENT','INVOICE','INVOICE_PAYMENT','EXPENSE','EXPENSE_PAYMENT','REVERSAL');
+CREATE INDEX IF NOT EXISTS ix_je_date ON journal_entries(entry_date);
+CREATE INDEX IF NOT EXISTS ix_je_source_type ON journal_entries(source_type);
 
 CREATE TABLE IF NOT EXISTS journal_lines(
   line_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL REFERENCES journal_entries(entry_id),
@@ -42,6 +44,8 @@ CREATE TABLE IF NOT EXISTS journal_lines(
   debit TEXT NOT NULL DEFAULT '0.00', credit TEXT NOT NULL DEFAULT '0.00',
   cost_center_department_id TEXT, line_description TEXT);
 CREATE INDEX IF NOT EXISTS ix_jl_account ON journal_lines(account_code);
+CREATE INDEX IF NOT EXISTS ix_jl_dept ON journal_lines(cost_center_department_id);
+CREATE INDEX IF NOT EXISTS ix_jl_entry ON journal_lines(entry_id);
 
 -- Posted entries are IMMUTABLE at database level: no UPDATE, no DELETE. Fix by reversing.
 CREATE TRIGGER IF NOT EXISTS trg_je_no_update BEFORE UPDATE ON journal_entries
@@ -126,6 +130,12 @@ CREATE TABLE IF NOT EXISTS statutory_rates(
 CREATE TABLE IF NOT EXISTS rule_changes(
   change_id INTEGER PRIMARY KEY AUTOINCREMENT, changed_at TEXT NOT NULL, changed_by TEXT NOT NULL,
   rule_type TEXT NOT NULL, rule_key TEXT NOT NULL, field TEXT NOT NULL, old_value TEXT, new_value TEXT, reason TEXT NOT NULL);
+
+-- Task 16: background jobs (the bulk payroll run) with progress that any API worker can read
+CREATE TABLE IF NOT EXISTS jobs(
+  job_id TEXT PRIMARY KEY, kind TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED',   -- QUEUED -> RUNNING -> DONE | FAILED
+  total INTEGER NOT NULL DEFAULT 0, done INTEGER NOT NULL DEFAULT 0, message TEXT, params TEXT,
+  created_by TEXT, backend TEXT, created_at TEXT, started_at TEXT, finished_at TEXT, result TEXT, error TEXT);
 """
 
 
@@ -135,6 +145,9 @@ def connect(path=":memory:", check_same_thread=True) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.create_aggregate("dsum", 1, _DSum)
+    if path != ":memory:":
+        conn.execute("PRAGMA busy_timeout = 30000")      # wait instead of failing when the API and the worker write together
+        conn.execute("PRAGMA journal_mode = WAL")        # readers do not block the writer
     conn.executescript(SCHEMA)
     return conn
 

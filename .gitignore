@@ -1,7 +1,22 @@
+# Secrets - never commit these
 .env
+.secret_key
+
+# Python
 __pycache__/
 *.pyc
 .venv/
-*.db
 .pytest_cache/
+.coverage
+
+# Databases and local data (seed/ stays in git, data/ does not)
+*.sqlite
+*.db
 data/
+
+# Test, export and backup leftovers
+my_export_test/
+my_current_export/
+backups/
+test_output.txt
+requirements.old.txt

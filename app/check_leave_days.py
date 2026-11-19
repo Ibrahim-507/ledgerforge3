@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 from app.leave_days import count_leave_days
 
 LONG_LEAVE = "ML"
