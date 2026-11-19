@@ -59,85 +59,85 @@ NEW = {
 
 
 def test_list_returns_page_without_date_of_birth(client):
-    body = client.get("/api/v1/employees").json()
+    body = client.get("/employees").json()
     assert body["total"] == 4
     assert len(body["items"]) == 4
     assert "date_of_birth" not in body["items"][0]
 
 
 def test_pagination(client):
-    body = client.get("/api/v1/employees?page=2&page_size=3").json()
+    body = client.get("/employees?page=2&page_size=3").json()
     assert body["total"] == 4
     assert len(body["items"]) == 1
 
 
 def test_search_by_name(client):
-    items = client.get("/api/v1/employees?q=priya").json()["items"]
+    items = client.get("/employees?q=priya").json()["items"]
     assert [e["employee_id"] for e in items] == ["E003"]
 
 
 def test_filter_by_department(client):
-    assert client.get("/api/v1/employees?department_id=D02").json()["total"] == 1
+    assert client.get("/employees?department_id=D02").json()["total"] == 1
 
 
 def test_get_employee(client):
-    r = client.get("/api/v1/employees/E002")
+    r = client.get("/employees/E002")
     assert r.status_code == 200
     assert r.json()["full_name"] == "Ravi Kumar"
 
 
 def test_unknown_employee_is_404(client):
-    assert client.get("/api/v1/employees/NOPE").status_code == 404
+    assert client.get("/employees/NOPE").status_code == 404
 
 
 def test_create_employee(client):
-    r = client.post("/api/v1/employees", json=NEW)
+    r = client.post("/employees", json=NEW)
     assert r.status_code == 201
-    assert client.get("/api/v1/employees/E100").json()["full_name"] == "Mohan Das"
+    assert client.get("/employees/E100").json()["full_name"] == "Mohan Das"
 
 
 def test_create_with_bad_email_is_422(client):
-    assert client.post("/api/v1/employees", json={**NEW, "work_email": "not-an-email"}).status_code == 422
+    assert client.post("/employees", json={**NEW, "work_email": "not-an-email"}).status_code == 422
 
 
 def test_create_with_unknown_department_is_422(client):
-    assert client.post("/api/v1/employees", json={**NEW, "department_id": "D99"}).status_code == 422
+    assert client.post("/employees", json={**NEW, "department_id": "D99"}).status_code == 422
 
 
 def test_create_duplicate_id_is_409(client):
-    assert client.post("/api/v1/employees", json={**NEW, "employee_id": "E001"}).status_code == 409
+    assert client.post("/employees", json={**NEW, "employee_id": "E001"}).status_code == 409
 
 
 def test_patch_employee(client):
-    r = client.patch("/api/v1/employees/E002", json={"first_name": "Ravindra"})
+    r = client.patch("/employees/E002", json={"first_name": "Ravindra"})
     assert r.status_code == 200
     assert r.json()["full_name"] == "Ravindra Kumar"
 
 
 def test_patch_unknown_is_404(client):
-    assert client.patch("/api/v1/employees/NOPE", json={"first_name": "X"}).status_code == 404
+    assert client.patch("/employees/NOPE", json={"first_name": "X"}).status_code == 404
 
 
 def test_delete_sets_exit_date_and_keeps_row(client):
-    r = client.delete("/api/v1/employees/E002")
+    r = client.delete("/employees/E002")
     assert r.status_code == 200
     assert r.json()["exit_date"] is not None
-    assert client.get("/api/v1/employees/E002").status_code == 200
+    assert client.get("/employees/E002").status_code == 200
 
 
 def test_team_excludes_people_who_left_by_default(client):
-    ids = [e["employee_id"] for e in client.get("/api/v1/employees/E001/team").json()]
+    ids = [e["employee_id"] for e in client.get("/employees/E001/team").json()]
     assert ids == ["E002", "E003"]
 
 
 def test_team_can_include_people_who_left(client):
-    ids = [e["employee_id"] for e in client.get("/api/v1/employees/E001/team?include_left=true").json()]
+    ids = [e["employee_id"] for e in client.get("/employees/E001/team?include_left=true").json()]
     assert ids == ["E002", "E003", "E004"]
 
 
 def test_team_of_unknown_manager_is_404(client):
-    assert client.get("/api/v1/employees/NOPE/team").status_code == 404
+    assert client.get("/employees/NOPE/team").status_code == 404
 
 
 def test_bad_page_size_is_422(client):
-    assert client.get("/api/v1/employees?page_size=0").status_code == 422
+    assert client.get("/employees?page_size=0").status_code == 422

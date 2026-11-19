@@ -40,9 +40,9 @@ class RevisionOut(BaseModel):
 
 
 class RevisionCreate(BaseModel):
-    effective_from: date = Field(examples=["2025-07-01"])
-    new_annual_fixed: Decimal = Field(gt=0, examples=["1200000.00"])
-    revision_reason: str = Field(min_length=1, max_length=100, examples=["Annual increment"])
-    approved_by: str | None = Field(default=None, examples=["U-0099"])
-    role_id_after: str | None = Field(default=None, examples=["ROLE-SSE"])
+    effective_from: date
+    new_annual_fixed: Decimal = Field(gt=0)
+    revision_reason: str = Field(min_length=1, max_length=100)
+    approved_by: str | None = None
+    role_id_after: str | None = None
     

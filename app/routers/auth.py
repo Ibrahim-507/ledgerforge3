@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.auth_store import login as do_login
 from app.deps import get_db
@@ -9,8 +9,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 class LoginIn(BaseModel):
-    username: str = Field(examples=["sanjay.kumar@znova-demo.example"])
-    password: str = Field(examples=["Demo@12345"])
+    username: str
+    password: str
 
 
 @router.post("/login")

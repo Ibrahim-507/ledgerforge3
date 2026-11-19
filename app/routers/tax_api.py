@@ -1,7 +1,7 @@
 """Task 14: tax rules as data. Anyone in HR/Admin may READ them; only ADMIN may change them (see app/permissions.py)."""
 from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from app import tax_config as tc
 from app.deps import get_db
 from app.tax_explain import explain_tds
@@ -10,14 +10,14 @@ router = APIRouter(prefix="/tax", tags=["tax rules"])
 
 
 class SlabChange(BaseModel):
-    rate_percent: Decimal | None = Field(default=None, examples=["10"])
-    income_to: Decimal | None = Field(default=None, examples=["600000"])
-    reason: str = Field(examples=["Budget 2025 update"])
+    rate_percent: Decimal | None = None
+    income_to: Decimal | None = None
+    reason: str
 
 
 class ValueChange(BaseModel):
-    value: Decimal = Field(examples=["180000"])
-    reason: str = Field(examples=["PF ceiling update"])
+    value: Decimal
+    reason: str
 
 
 def _guard(fn, *args, **kwargs):

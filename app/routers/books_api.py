@@ -6,7 +6,7 @@ from decimal import Decimal
 from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app import expenses as bills
 from app import payroll_runs as runs
@@ -39,12 +39,12 @@ def _uid(request: Request) -> str:
 
 # ---------------- payroll runs ----------------
 class RunIn(BaseModel):
-    period_start: date = Field(examples=["2025-04-01"])
+    period_start: date
 
 
 class ReverseIn(BaseModel):
-    reverse_date: date = Field(examples=["2025-05-01"])
-    reason: str = Field(examples=["Incorrect tax calculation"])
+    reverse_date: date
+    reason: str
 
 
 def _run_row(conn, run_id):
@@ -95,24 +95,24 @@ def reverse_run(run_id: str, body: ReverseIn, request: Request, conn=Depends(get
 
 # ---------------- vendor bills ----------------
 class BillIn(BaseModel):
-    vendor_id: str = Field(examples=["VEND-0001"])
-    bill_date: date = Field(examples=["2025-06-15"])
-    category_account: int = Field(examples=[5010])
-    amount_excl_gst: Decimal = Field(examples=["100000.00"])
-    gst_rate_percent: Decimal = Field(default=Decimal("18"), examples=["18"])
-    department_id: str | None = Field(default=None, examples=["DEPT-ENG"])
-    description: str | None = Field(default=None, examples=["AWS hosting"])
-    bill_reference: str | None = Field(default=None, examples=["INV-2025-00123"])
-    allow_duplicate: bool = Field(default=False, examples=[False])
+    vendor_id: str
+    bill_date: date
+    category_account: int
+    amount_excl_gst: Decimal
+    gst_rate_percent: Decimal = Decimal("18")
+    department_id: str | None = None
+    description: str | None = None
+    bill_reference: str | None = None
+    allow_duplicate: bool = False
 
 
 class RejectIn(BaseModel):
-    reason: str = Field(default="", examples=["Duplicate bill"])
+    reason: str = ""
 
 
 class PayBillIn(BaseModel):
-    paid_date: date = Field(examples=["2025-07-01"])
-    payment_mode: str = Field(default="NEFT", examples=["NEFT"])
+    paid_date: date
+    payment_mode: str = "NEFT"
 
 
 def _bill_row(conn, expense_id):
