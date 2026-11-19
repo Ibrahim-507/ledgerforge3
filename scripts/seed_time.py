@@ -1,4 +1,4 @@
-import time as timer
+﻿import time as timer
 
 import pandas as pd
 from sqlalchemy import insert
