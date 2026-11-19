@@ -1,5 +1,4 @@
 import json, logging
-import pytest
 from fastapi.testclient import TestClient
 from app.cache import ttl_cache
 from app import observability
