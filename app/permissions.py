@@ -2,8 +2,6 @@
 Deny by default: a route with no rule is refused (403), so a forgotten route can never be left open."""
 from dataclasses import dataclass
 
-from app.versioning import normalize
-
 ALL = frozenset({"ADMIN", "HR", "EMPLOYEE"})
 HR_UP = frozenset({"ADMIN", "HR"})
 ADMIN = frozenset({"ADMIN"})
@@ -19,6 +17,7 @@ class Rule:
 PUBLIC = {("POST", "/auth/login"), ("GET", "/health"), ("GET", "/")}     # login, health check, the login page
 
 RULES: dict[tuple[str, str], Rule] = {
+    
     ("GET", "/auth/me"): Rule(ALL, note="your own profile"),
     # departments
     ("GET", "/departments"): Rule(ALL),
@@ -52,11 +51,6 @@ RULES: dict[tuple[str, str], Rule] = {
     ("POST", "/bills/{expense_id}/reject"): Rule(ADMIN),
     ("POST", "/bills/{expense_id}/pay"): Rule(ADMIN),
     ("GET", "/reports/spend"): Rule(HR_UP),
-    # background jobs (Task 16): HR may start and watch a payroll run, only Admin may start the approval
-    ("POST", "/jobs/payroll-process"): Rule(HR_UP, note="runs the whole range in the background"),
-    ("POST", "/jobs/payroll-approve"): Rule(ADMIN, note="posts every processed month; skips months you ran yourself"),
-    ("GET", "/jobs"): Rule(HR_UP),
-    ("GET", "/jobs/{job_id}"): Rule(HR_UP, note="progress"),
     # tax rules as data (Task 14): anyone in HR/Admin may read, ONLY Admin may change
     ("GET", "/tax/slabs"): Rule(HR_UP),
     ("PUT", "/tax/slabs/{slab_id}"): Rule(ADMIN, note="changes tax for the next payroll run"),
@@ -77,13 +71,12 @@ RULES: dict[tuple[str, str], Rule] = {
 
 
 def is_public(method: str, route_path: str) -> bool:
-    return (method.upper(), normalize(route_path)) in PUBLIC
+    return (method.upper(), route_path) in PUBLIC
 
 
 def decide(method: str, route_path: str, path_params: dict, user: dict | None):
     """None = allowed, otherwise (http_status, message). `route_path` is the route TEMPLATE, e.g. /employees/{employee_id}."""
     method = method.upper()
-    route_path = normalize(route_path)                       # /api/v1/employees and /employees use the same rule
     if (method, route_path) in PUBLIC:
         return None
     if user is None:
@@ -102,7 +95,6 @@ def decide(method: str, route_path: str, path_params: dict, user: dict | None):
 def role_table_markdown(routes) -> str:
     """routes = [(method, path), ...] -> markdown table of who may use each (flags routes with no rule)."""
     out = ["| Method | Route | Admin | HR | Employee | Note |", "|---|---|---|---|---|---|"]
-    routes = [(m, normalize(p)) for m, p in routes]
     for method, path in sorted(routes, key=lambda x: (x[1], x[0])):
         if (method, path) in PUBLIC:
             out.append(f"| {method} | {path} | public | public | public | login |")
