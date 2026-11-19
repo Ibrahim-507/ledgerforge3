@@ -1,6 +1,6 @@
 """Background jobs: start the bulk payroll and watch its progress."""
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app import jobs
 from app.deps import db_path, get_db
@@ -9,9 +9,9 @@ router = APIRouter(tags=["jobs"])
 
 
 class PayrollJobIn(BaseModel):
-    first: str = "2025-04"
-    last: str = "2026-09"
-    pay: bool = False
+    first: str = Field(default="2025-04", examples=["2025-04"])
+    last: str = Field(default="2026-09", examples=["2026-09"])
+    pay: bool = Field(default=False, examples=[False])
 
 
 def _start(kind, body: PayrollJobIn, request: Request, conn):

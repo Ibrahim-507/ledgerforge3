@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS journal_entries(
   total_credit TEXT NOT NULL, reversal_of_source_id TEXT, created_by TEXT, created_at TEXT);
 CREATE UNIQUE INDEX IF NOT EXISTS ux_je_source ON journal_entries(source_type, source_id)
   WHERE source_type IN ('PAYROLL_RUN','SALARY_PAYMENT','INVOICE','INVOICE_PAYMENT','EXPENSE','EXPENSE_PAYMENT','REVERSAL');
+CREATE INDEX IF NOT EXISTS ix_je_date ON journal_entries(entry_date);
+CREATE INDEX IF NOT EXISTS ix_je_source_type ON journal_entries(source_type);
 
 CREATE TABLE IF NOT EXISTS journal_lines(
   line_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL REFERENCES journal_entries(entry_id),
@@ -42,6 +44,8 @@ CREATE TABLE IF NOT EXISTS journal_lines(
   debit TEXT NOT NULL DEFAULT '0.00', credit TEXT NOT NULL DEFAULT '0.00',
   cost_center_department_id TEXT, line_description TEXT);
 CREATE INDEX IF NOT EXISTS ix_jl_account ON journal_lines(account_code);
+CREATE INDEX IF NOT EXISTS ix_jl_dept ON journal_lines(cost_center_department_id);
+CREATE INDEX IF NOT EXISTS ix_jl_entry ON journal_lines(entry_id);
 
 -- Posted entries are IMMUTABLE at database level: no UPDATE, no DELETE. Fix by reversing.
 CREATE TRIGGER IF NOT EXISTS trg_je_no_update BEFORE UPDATE ON journal_entries

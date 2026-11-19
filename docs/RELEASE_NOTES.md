@@ -18,4 +18,27 @@
 - (add anything else you found during the audit)
 
 ## Final checks
-Paste the output of the five official checks on live data here.
+```
+PASS  Every journal entry balances  -  debits-credits=0.0, unbalanced entries=0
+PASS  Payroll equals ledger, every month  -  largest monthly difference=0.00
+PASS  Receivables equal open invoices  -  ledger 1100=139,394,278.00, open (sent/overdue/part-paid) invoices=139,394,278.00
+PASS  Payroll employees exist  -  payroll rows with unknown employee=0
+PASS  Nobody is paid after leaving  -  payroll rows after exit_date=0
+
+5/5 checks passed
+```
+
+## Performance (Task 18)
+| Operation | Before | After | Notes |
+|-----------|--------|-------|-------|
+| 18-month payroll calculation | 27.5s | 26.7s | 7,340 rows, ~3.7ms/row |
+| Payroll items + employee join | 4ms | 4ms | Uses index on run_id |
+| Statutory summary | 1ms | 1ms | Uses indexes on run_id |
+| Employee search (LIKE) | full scan | full scan | SQLite LIMIT: leading wildcard prevents index use |
+| Trial balance (SQLite) | <1ms | <1ms | Uses index on account_code |
+| Payroll journal entries | <1ms | <1ms | Uses index on source_type |
+
+Indexes added:
+- `employees`: full_name, work_email, composite (full_name, work_email)
+- `journal_entries`: entry_date, source_type
+- `journal_lines`: cost_center_department_id, entry_id
