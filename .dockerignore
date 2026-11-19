@@ -1,0 +1,30 @@
+# secrets and local state: must never enter the image
+.env
+.env.*
+!.env.example
+.secret_key
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+# not needed at run time
+.git
+.github
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.coverage
+htmlcov
+tests
+docs
+evidence
+reports
+my_export
+data
+csv
+payroll_results.csv
+payroll_mismatches.csv
+my_trial_balance.csv
+*.bak

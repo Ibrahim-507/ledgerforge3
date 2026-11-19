@@ -109,31 +109,31 @@ def test_old_rows_are_kept_not_overwritten(db_engine):
 
 
 def test_salary_endpoint_on_a_date(client):
-    body = client.get("/employees/E1/salary?on=2024-06-15").json()
+    body = client.get("/api/v1/employees/E1/salary?on=2024-06-15").json()
     assert Decimal(body["monthly_earnings"]) == Decimal("20000")
     assert len(body["components"]) == 3
 
 
 def test_revision_history_lists_each_change_with_reason(client):
-    r = client.post("/employees/E1/salary/revisions", json={
+    r = client.post("/api/v1/employees/E1/salary/revisions", json={
         "effective_from": "2025-01-01", "new_annual_fixed": "300000", "revision_reason": "Annual raise"})
     assert r.status_code == 201
-    history = client.get("/employees/E1/salary/revisions").json()
+    history = client.get("/api/v1/employees/E1/salary/revisions").json()
     assert [h["revision_reason"] for h in history] == ["Joining", "Annual raise"]
 
 
 def test_cannot_revise_on_or_before_current_start(client):
     payload = {"new_annual_fixed": "300000", "revision_reason": "Bad date"}
-    assert client.post("/employees/E1/salary/revisions", json={**payload, "effective_from": "2024-01-01"}).status_code == 422
-    assert client.post("/employees/E1/salary/revisions", json={**payload, "effective_from": "2023-06-01"}).status_code == 422
+    assert client.post("/api/v1/employees/E1/salary/revisions", json={**payload, "effective_from": "2024-01-01"}).status_code == 422
+    assert client.post("/api/v1/employees/E1/salary/revisions", json={**payload, "effective_from": "2023-06-01"}).status_code == 422
 
 
 def test_zero_salary_is_422(client):
-    r = client.post("/employees/E1/salary/revisions", json={
+    r = client.post("/api/v1/employees/E1/salary/revisions", json={
         "effective_from": "2025-01-01", "new_annual_fixed": "0", "revision_reason": "Bad"})
     assert r.status_code == 422
 
 
 def test_unknown_employee_is_404(client):
-    assert client.get("/employees/NOPE/salary").status_code == 404
-    assert client.get("/employees/NOPE/salary/revisions").status_code == 404
+    assert client.get("/api/v1/employees/NOPE/salary").status_code == 404
+    assert client.get("/api/v1/employees/NOPE/salary/revisions").status_code == 404

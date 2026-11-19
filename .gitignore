@@ -5,3 +5,15 @@ __pycache__/
 *.db
 .pytest_cache/
 data/
+
+.secret_key
+*.sqlite
+
+.env
+.secret_key
+
+.coverage
+my_export_test/
+my_current_export/
+backups/
+test_output.txt
