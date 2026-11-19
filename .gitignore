@@ -11,3 +11,9 @@ data/
 
 .env
 .secret_key
+
+.coverage
+my_export_test/
+my_current_export/
+backups/
+test_output.txt
