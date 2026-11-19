@@ -9,3 +9,11 @@ data/
 *.sqlite
 *.db
 .venv/
+
+*.sqlite
+*.db
+.venv/
+.coverage
+my_export_test/
+my_current_export/
+backups/
