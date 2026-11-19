@@ -24,6 +24,9 @@ def setup_logging():
 
 
 def _books_path():
+    p = os.environ.get("LEDGERFORGE_DB") or os.environ.get("LEDGERFORGE_BOOKS_PATH")
+    if p:
+        return p
     try:
         from app import books_db
         for n in ("DB_PATH", "DB_FILE", "DATABASE_PATH", "BOOKS_PATH", "PATH"):
@@ -38,7 +41,8 @@ def _books_path():
 def check_db():
     out = {}
     try:
-        c = sqlite3.connect(_books_path(), timeout=3)
+        from pathlib import Path
+        c = sqlite3.connect(Path(_books_path()).resolve().as_uri() + "?mode=rw", uri=True, timeout=3)
         c.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchall()
         c.close()
         out["books_sqlite"] = "ok"
